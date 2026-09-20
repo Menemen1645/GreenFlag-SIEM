@@ -1,5 +1,6 @@
-# GreenFlag-SIEM
+# GreenFlag-SIEM ![C#](https://img.shields.io/badge/C%23-239120?style=for-the-badge&logo=c-sharp&logoColor=white) ![ASP.NET](https://img.shields.io/badge/ASP.NET-5C2D91?style=for-the-badge&logo=.net&logoColor=white) ![SQL Server](https://img.shields.io/badge/SQL_Server-CC2927?style=for-the-badge&logo=microsoft-sql-server&logoColor=white) ![UDP](https://img.shields.io/badge/UDP-00599C?style=for-the-badge&logo=databricks&logoColor=white)
 GreenFlag is a lightweight SIEM solution developed with C#. Its modular architecture is designed to make the system easy to extend, improve, and integrate with new components over time.
+
 ## Overview
 
 GreenFlag is a lightweight SIEM solution developed with C#. The project focuses on collecting, processing, storing, and monitoring security-related log data through a modular architecture.

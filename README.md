@@ -1,56 +1,48 @@
-# GreenFlag-SIEM ![C#](https://img.shields.io/badge/C%23-239120?style=for-the-badge&logo=c-sharp&logoColor=white) ![ASP.NET](https://img.shields.io/badge/ASP.NET-5C2D91?style=for-the-badge&logo=.net&logoColor=white) ![SQL Server](https://img.shields.io/badge/SQL_Server-CC2927?style=for-the-badge&logo=microsoft-sql-server&logoColor=white) ![UDP](https://img.shields.io/badge/UDP-00599C?style=for-the-badge&logo=databricks&logoColor=white)
-GreenFlag is a lightweight SIEM solution developed with C#. Its modular architecture is designed to make the system easy to extend, improve, and integrate with new components over time.
-## 📸 System Showcase
+# GreenFlag SIEM
 
-### 🎨 UI Themes & Dashboard
-| Dashboard (Dark Mode) | Dashboard (Light Mode) |
-|:---:|:---:|
+![C#](https://img.shields.io/badge/C%23-239120?style=for-the-badge\&logo=c-sharp\&logoColor=white)
+![ASP.NET](https://img.shields.io/badge/ASP.NET-5C2D91?style=for-the-badge\&logo=.net\&logoColor=white)
+![SQL Server](https://img.shields.io/badge/SQL_Server-CC2927?style=for-the-badge\&logo=microsoft-sql-server\&logoColor=white)
+![UDP](https://img.shields.io/badge/UDP-00599C?style=for-the-badge\&logo=databricks\&logoColor=white)
+
+GreenFlag is a lightweight SIEM solution developed with C#. It is designed around a modular architecture for collecting, processing, storing, and monitoring security-related event data.
+
+## System Showcase
+
+### UI Themes & Dashboard
+
+|             Dashboard — Dark Mode            |             Dashboard — Light Mode             |
+| :------------------------------------------: | :--------------------------------------------: |
 | ![Dashboard Dark](Assets/GreenFlag-Dark.png) | ![Dashboard Light](Assets/GreenFlag-Light.png) |
 
-### 🔍 Log Monitoring & Management
-| Log History & Filtering | System Management Panel |
-|:---:|:---:|
+### Log Monitoring & Management
+
+|            Log History & Filtering           |             System Management Panel             |
+| :------------------------------------------: | :---------------------------------------------: |
 | ![Log History](Assets/GreenFlag-History.png) | ![Management Panel](Assets/GreenFlag-Panel.png) |
 
-### 🛡️ Rules & Executive Reporting
-| Rule Management & Alerts | Executive Summary (Excel) |
-|:---:|:---:|
+### Rules & Executive Reporting
+
+|            Rule Management & Alerts            |                   Executive Summary — Excel                  |
+| :--------------------------------------------: | :----------------------------------------------------------: |
 | ![Rule Management](Assets/GreenFlag-Rules.png) | ![Executive Summary](Assets/GreenFlag-Executive-Summary.png) |
 
-### 📊 Detailed Excel Analytics
-| Security Events Data | Report Statistics |
-|:---:|:---:|
-| ![Security Events](Assets/GreenFlag-Security-Events.png) | ![Report Statistics](Assets/GreenFlag-Report-Statistics.png) |
+---
 
-## Overview
+# Overview
 
-GreenFlag is a lightweight SIEM solution developed with C#. The project focuses on collecting, processing, storing, and monitoring security-related log data through a modular architecture.
+GreenFlag is a lightweight SIEM solution developed with C#. The project focuses on collecting, processing, storing, and monitoring security-related event data through a modular architecture.
 
-The current version collects Windows Event Logs directly from the Windows Event Viewer system, processes them through the GreenFlag Agent and Ingestor, stores them in SQL Server, and presents the collected data through a web-based management interface.
+The current version collects Windows Event Logs through the GreenFlag Agent, processes them through the Agent and Ingestor pipeline, stores the resulting data in SQL Server, and provides a web-based interface for monitoring and management.
 
-GreenFlag is currently under active development. The current implementation provides the core log collection, processing, storage, monitoring, and reporting pipeline, while several advanced SIEM capabilities are still being developed.
+GreenFlag is currently under active development. The core collection, processing, storage, monitoring, and reporting pipeline is functional, while several advanced SIEM capabilities are still being developed.
 
-## Vision & Roadmap
-
-The long-term goal of GreenFlag is to evolve into a more complete and extensible SIEM platform.
-
-Planned improvements include:
-
-* Developing a dedicated endpoint agent for more flexible and advanced log collection
-* Implementing an event correlation engine to identify relationships between multiple events
-* Expanding detection and alerting capabilities
-* Improving incident investigation and management
-* Adding multi-platform support, including Linux
-* Expanding endpoint monitoring capabilities
-* Developing more advanced reporting and analytics
-
-The project is designed with a modular architecture so that these capabilities can be introduced progressively without requiring a complete redesign of the existing system.
-
-## 1. General Architecture
+# Architecture
 
 GreenFlag consists of three main components:
+
 ```text
-Windows Event Log (WEL)
+Windows Event Log
         │
         ▼
 GreenFlag Agent
@@ -68,155 +60,179 @@ GreenFlag Ingestor
         └── Log Doctor
         │
         ▼
-SQL Server
+    SQL Server
         ▲
         │
 GreenFlag Web
 ```
-The Web application does not communicate directly with the Ingestor. It connects directly to SQL Server.
 
-## 2. GreenFlag Agent
+The Web application does not communicate directly with the Ingestor. It reads and manages the data stored in SQL Server.
 
-The Agent runs on Windows endpoints and collects events from Windows Event Log (WEL).
+---
 
-### 2.1 Event Tracking Through WEL
+# GreenFlag Agent
 
-At startup, the Agent connects to WEL and checks the existing event records.
+The GreenFlag Agent runs on Windows endpoints and collects events from Windows Event Log (WEM).
 
-It uses the latest processed EventRecordId as its reference point.
+## Event Tracking
 
-Instead of reading the entire event history every time it starts, the Agent continues monitoring from the point it tracks.
+At startup, the Agent checks the available event records and uses the latest processed `EventRecordId` as its reference point.
+
+Instead of repeatedly processing the entire event history, it continues monitoring from the point it is tracking.
 
 For example:
+
 ```text
-Last processed EventRecordId: 500
+long lastRecordId = GetCurrentMaxRecordId(channel);
 
-New records:
-501
-502
-503
-504
-...
+while (!token.IsCancellationRequested)
+{
+    string queryStr =
+        $"*[System[(EventRecordID > {lastRecordId})]]";
+
+    var query = new EventLogQuery(
+        channel.Name,
+        PathType.LogName,
+        queryStr
+    );
+
+    using var reader = new EventLogReader(query);
+
+    EventRecord record;
+
+    while ((record = reader.ReadEvent()) != null)
+    {
+        using (record)
+        {
+            if (record.RecordId.HasValue)
+                lastRecordId = record.RecordId.Value;
+
+            var pkt = parser.Parse(record);
+            sendQueue.Add(pkt);
+        }
+    }
+}
 ```
-The Agent continues processing new records from this point.
 
-EventRecordId is different from the Windows Event ID.
+`EventRecordId` is different from the Windows Event ID.
 
-For example:
 ```text
 EventRecordId = 500
 EventId       = 4624
 ```
-### 2.2 ILogChannel Architecture
 
-The Agent manages different Windows event sources through separate channels.
+## Log Channels
 
-These channels are created through the ILogChannel interface.
+The Agent manages different Windows Event Log sources through the `ILogChannel` interface.
 
-The main channels currently include:
+Current channels include:
 
-Security
-Application
-System
+* Security
+* Application
+* System
 
-This allows different Windows Event Log sources to be processed independently.
+This allows different event sources to be processed independently.
 
-### 2.3 Event Parsing
+## Event Parsing
 
-The Agent does not send raw Windows event data directly to the Ingestor.
+Raw Windows event data is processed before being sent to the Ingestor.
 
-Events are first processed through the IEventParser architecture.
+The Agent uses the `IEventParser` architecture together with `ParserFactory` to convert raw event data into a structured format.
 
-The parser converts raw Windows event data into a structured format that can be used by GreenFlag.
-
-Different event types are handled through ParserFactory.
-
-For example:
 ```text
 Raw Windows Event
         │
         ▼
-IEventParser
+   IEventParser
         │
         ▼
-ParserFactory
+   ParserFactory
         │
         ├── Security Parser
         ├── Application Parser
         └── System Parser
         │
         ▼
-Structured Event
+ Structured Event
 ```
-The parser extracts and organizes relevant information from the event.
 
-The Agent also processes event messages and machine information while handling the records.
+The parser extracts and organizes relevant information such as event messages and machine information.
 
-### 2.4 Waiting for New Events
+## Waiting for New Events
 
-The Agent does not continuously poll WEM without delay when there are no new events.
+When no new event is available, the Agent does not continuously poll the event source.
 
-If no new event is available or an appropriate operation cannot be performed, the Agent waits for approximately:
+It waits for approximately five seconds before checking again.
 
-5 seconds
+This reduces unnecessary CPU usage during periods with no new events.
 
-before checking again.
+---
 
-This reduces unnecessary CPU usage caused by continuous polling.
+# UDP Sender
 
-### 3. UDP Sender
+Processed logs are stored as `Event_Paket` objects and grouped into batches before transmission.
 
-Logs collected by the Agent are stored as Event_Paket objects.
+A packet is sent when:
 
-The UDP sender groups multiple events into a list before transmission.
+* The configured packet capacity is reached, or
+* The configured time interval expires.
 
-For example:
+Logs are accumulated in memory and transmitted when either the batch reaches 20 events or the configured time interval expires:
+
 ```text
-Event_Paket List
+if (sendQueue.TryTake(out var pkt, 500))
+{
+    batch.Add(pkt);
+}
 
-[Log1]
-[Log2]
-[Log3]
-...
+bool timeUp =
+    (DateTime.Now - lastFlush).TotalSeconds >= 5;
+
+bool batchFull = batch.Count >= 20;
+
+if ((timeUp || batchFull) && batch.Count > 0)
+{
+    SendBatch(batch);
+    batch.Clear();
+    lastFlush = DateTime.Now;
+}
 ```
-A packet is sent when either:
+Oversized serialized batches are split into individual packets before transmission.
 
-The packet reaches its configured capacity.
-The configured time interval expires.
-
-This allows multiple logs to be transmitted together instead of sending every event individually.
-
-The transmission flow is:
 ```text
-Event_Paket List
-        ↓
-JSON Serialization
-        ↓
-UDP
-        ↓
-Ingestor
+if (data.Length > 60_000)
+{
+    foreach (var log in logs)
+    {
+        byte[] single = Encoding.UTF8.GetBytes(
+            JsonSerializer.Serialize(new[] { log })
+        );
+
+        udpClient.Send(single, single.Length);
+    }
+}
+else
+{
+    udpClient.Send(data, data.Length);
+}
 ```
-### 4. Agent Local IP Address
 
-The Agent determines its local IP address using GetLocalIPAddress.
+The Agent also determines its local IP address and includes this information in its heartbeat data.
 
-This information is included in the Agent's heartbeat data and sent to the Ingestor.
+---
 
-### 5. Agent Heartbeat
+# Agent Heartbeat
 
-The Agent periodically sends heartbeat information.
+The Agent periodically sends heartbeat information to the Ingestor over UDP using JSON.
 
-Heartbeats are transmitted over UDP in JSON format.
+Heartbeat information can include:
 
-Heartbeat data contains information required to identify and monitor the Agent, such as:
+* Agent ID
+* Username
+* IP Address
+* Hostname
+* Agent status information
 
-Agent ID
-Username
-IP Address
-Hostname
-Other Agent status information
-
-The general flow is:
 ```text
 Agent
   │
@@ -232,29 +248,25 @@ UDP
   ▼
 Ingestor
 ```
-## 6. GreenFlag Ingestor
 
-The Ingestor is the central data processing component of GreenFlag.
+---
 
-It receives logs and heartbeat information from Agents over UDP, processes the incoming data, queues it, and forwards the processed data to SQL Server.
+# GreenFlag Ingestor
 
-### 7. UDP Server
+The Ingestor is the central processing component of GreenFlag.
 
-The Ingestor operates as a UDP server.
+It receives logs and heartbeat information from Agents over UDP, processes incoming data, manages queues, applies rules, enriches logs, and forwards processed data to SQL Server.
 
-A buffer of approximately:
+## UDP Server
 
-64 MB
+The Ingestor operates as a UDP server and uses a 64 MB receive buffer.
 
-is allocated for the UDP listener.
+The UDP socket is also handled to reduce Windows-side socket and port issues related to UDP communication.
 
-The UDP socket is also handled in a way that helps prevent Windows-side socket and port issues when the remote endpoint is not actively listening on the corresponding UDP port.
+## Incoming Packet Processing
 
-### 8. Incoming Packet Processing
+Incoming UDP packets follow this general flow:
 
-The Ingestor processes incoming UDP packets through its main processing loop.
-
-The basic flow is:
 ```text
 UDP Packet
     ↓
@@ -266,66 +278,34 @@ Log Validation
     ↓
 Log Queue
 ```
+
 If JSON deserialization fails:
 
-The invalid packet is counted.
+* The invalid packet is counted.
+* The error is recorded.
+* The error is printed to the console.
+* Processing continues.
 
-The error information is recorded.
+This prevents a single malformed packet from terminating the entire Ingestor.
 
-The error is printed to the console.
+---
 
-Processing continues.
+# Log Queue & Load Protection
 
-The goal is to prevent a single malformed JSON packet from causing the entire Ingestor to stop.
+Incoming logs are stored in `LogKuyruk`.
 
-### 9. Incoming Log Count
+The current queue limit is:
 
-The Ingestor keeps track of the total number of incoming logs in memory.
-
-For example:
-
-Interlocked.Add(ref IncomingLogCount, paketler.Count);
-
-This allows the incoming log counter to be updated in a thread-safe manner.
-
-The counter is later used by system statistics and LogDoctor.
-
-### 10. Log Queue
-
-Incoming logs are placed into LogKuyruk.
-
-The current maximum queue capacity is:
-
+```text
 100,000 logs
-
-This prevents the Ingestor from consuming unlimited amounts of memory under heavy load.
-
-### 11. Load Protection and Log Dropping
-
-When the queue reaches its maximum capacity, logs are not treated equally.
-
-The Ingestor first checks whether a rule exists for the incoming event.
-
-For example:
-```text
-if (KuralHafizasi.TryGetValue(log.event_id, out KuralBilgisi kural))
-{
-    anlikSeverity = kural.Severity;
-    kuralvar = true;
-}
 ```
-When the queue is full, the system can drop lower-priority logs:
-```text
-if (LogKuyruk.Count >= kuyrukLimit &&
-    (!kuralvar || anlikSeverity <= 1))
-{
-    Interlocked.Increment(ref DroppedQueueCount);
-    continue;
-}
-```
-The purpose of this mechanism is to protect the system under heavy load.
 
-In simplified form:
+This prevents unlimited memory growth under heavy load.
+
+When the queue reaches its limit, the Ingestor checks the event's configured rule and severity.
+
+Lower-priority logs can be dropped when the queue is full, while higher-priority logs are preserved whenever possible.
+
 ```text
 Queue Full
    │
@@ -333,126 +313,77 @@ Queue Full
    │
    └── Important log → KEEP
 ```
-Dropped logs are counted separately.
 
-This allows the system to protect more important events instead of allowing queue growth to consume unlimited resources.
+To prevent unlimited queue growth, the Ingestor applies load protection when the queue reaches its configured limit. Lower-priority events can be dropped while higher-priority events are preserved whenever possible.
 
-### 12. Heartbeat Queue
+```text
+byte anlikSeverity = 1;
+bool kuralvar = false;
 
-Incoming heartbeat data is not written directly to SQL Server.
+if (KuralHafizasi.TryGetValue(
+    log.event_id,
+    out KuralBilgisi kural))
+{
+    anlikSeverity = kural.Severity;
+    kuralvar = true;
+}
 
-Instead, heartbeat information is placed into a separate queue.
+if (LogKuyruk.Count >= kuyrukLimit &&
+    (!kuralvar || anlikSeverity <= 1))
+{
+    Interlocked.Increment(ref DroppedQueueCount);
+    continue;
+}
 
-The HeartbeatWorker later processes this queue.
+LogKuyruk.Enqueue(log);
+```
 
-This prevents the UDP listener from being blocked by database operations.
+Dropped logs are counted separately through `DroppedQueueCount`.
 
-### 13. Agent Memory
+This provides a basic load-protection mechanism for high-volume situations.
 
-The Ingestor keeps track of Agent information received from logs and heartbeats.
+---
+
+# Agent Memory
+
+The Ingestor maintains Agent information received from heartbeats and incoming logs.
 
 Information such as:
 
 * Agent ID
-* Username
-* IP Address
 * Hostname
-
-can be stored in memory.
-
-This information can later be used to enrich incoming logs before they are written to SQL Server.
-
-For example, a log may only contain:
-
-Hostname = HOST-PC-01
-
-The Ingestor can use its Agent information to enrich the log with:
-
-* AgentId
 * Username
 * IP Address
 
-### 14. Main Async Task
-
-The main Ingestor task operates asynchronously.
-
-Its responsibilities include:
-
-* Loading rules
-* Listening for UDP traffic
-* Receiving logs
-* Adding logs to the queue
-* Receiving heartbeat data
-* Running worker components
-* Tracking system statistics
-
-The main task also runs:
-
-* SQLWorker
-* HeartbeatWorker
-* LogDoctor
-
-### 15. SQL Worker
-
-The SQLWorker is responsible for moving logs from the Log Queue to SQL Server.
-
-The worker retrieves a certain number of logs and creates a batch.
-
-The current implementation processes approximately:
-
-100 logs per batch.
+can be kept in memory and used later for log enrichment.
 
 For example:
+
 ```text
-Log Queue
-   ↓
-100 Logs
-   ↓
-Batch List
-   ↓
-DB Write
+Hostname
+    ↓
+Agent Information
+    ↓
+AgentId
+Username
+IP Address
 ```
-As long as the batch contains logs, the worker processes them and sends them to the database.
 
-After the batch is processed, it is cleared.
+This allows incoming events to be associated with their corresponding Agent.
 
-If there are not enough logs available, the worker waits for a period of time and checks again.
+---
 
-Any SQL worker error is printed to the console.
+# Rule Memory
 
-### 16. DB Write
+The Ingestor loads rules from SQL Server and keeps them in memory.
 
-The database writing stage receives an Event_Paket list and converts it into a list suitable for SQL insertion.
+Rules are associated with event IDs and can define values such as:
 
-If the list is empty or contains zero logs, the operation returns immediately.
+* Severity
+* Category
 
-#### 16.1 Default Severity
+Conceptually:
 
-During processing, each incoming log initially receives:
-
-Severity = 1
-
-The rule memory is then checked to determine whether the event should receive a different severity.
-
-#### 16.2 Category
-
-The log's category is checked during processing.
-
-If the category is empty, it is set to:
-
-Unknown
-
-#### 16.3 Hostname
-
-The hostname is also checked.
-
-If no hostname is available, it is left empty.
-
-### 17. Rule Memory
-
-The Ingestor loads detection rules from SQL Server and keeps them in memory.
-
-The rules can be represented conceptually as:
 ```text
 Event ID
     ↓
@@ -461,148 +392,71 @@ Rule Information
 Severity
 Category
 ```
-During database processing, the incoming event's event_id is compared against the rules stored in KuralHafizasi.
+When an incoming event is processed, its `event_id` is compared against the rules stored in `KuralHafizasi`.
 
-If a matching rule exists:
+If a matching rule exists, the event's severity and category are updated accordingly.
 
-* Severity is updated.
-* Category is updated.
+---
 
-This allows incoming logs to be enriched according to the currently configured rules before they are stored in SQL Server.
+# Asynchronous Workers
 
-18. Log Enrichment
+The Ingestor uses separate asynchronous workers for different responsibilities.
 
-During the database write stage, additional information is added to incoming logs.
-
-The Agent information is retrieved using the hostname.
-
-For example:
 ```text
-Hostname
-    ↓
-GetOrFetchAgentInfoAsync()
-    ↓
-Agent Status / Agent Memory
-    ↓
-AgentId
-Username
-IP Address
+                 GreenFlag Ingestor
+                        │
+        ┌───────────────┼───────────────┐
+        │               │               │
+        ▼               ▼               ▼
+   SQL Worker    Heartbeat Worker   Log Doctor
+        │               │               │
+        ▼               ▼               ▼
+    SQL Logs      Agent Statuses    Pipeline Stats
 ```
-For example:
+
+## SQL Worker
+
+`SQLWorker` moves logs from the Log Queue to SQL Server.
+
+The current implementation processes approximately 100 logs per batch.
+
 ```text
-if (!string.IsNullOrEmpty(hostname))
+Log Queue
+   ↓
+Batch (100)
+   ↓
+Bulk DB Write
+   ↓
+SQL Server
+```
+
+After the batch is processed, it is cleared and the worker continues processing subsequent logs.
+
+```text
+int batchsize = 100;
+List<Event_paket> batch = new List<Event_paket>(batchsize);
+
+while (!token.IsCancellationRequested)
 {
-    var agentInfo = await GetOrFetchAgentInfoAsync(hostname, conn);
-
-    if (agentInfo != null)
+    while (batch.Count < batchsize &&
+           LogKuyruk.TryDequeue(out var log))
     {
-        agentIdObj = agentInfo.AgentId;
+        batch.Add(log);
+    }
 
-        if (!string.IsNullOrEmpty(agentInfo.UserName))
-            userNameObj = agentInfo.UserName;
-
-        if (!string.IsNullOrEmpty(agentInfo.IpAddress))
-            ipObj = agentInfo.IpAddress;
+    if (batch.Count > 0 &&
+        (batch.Count >= batchsize || LogKuyruk.IsEmpty))
+    {
+        await dbyaz(batch);
+        batch.Clear();
     }
 }
 ```
-This allows the Ingestor to enrich the basic event data received from the Agent with additional Agent information.
 
-### 19. SQL Log Record Creation
+## Heartbeat Worker
 
-After rule processing and enrichment, the remaining log information is added.
+`HeartbeatWorker` processes heartbeat data received over UDP and writes the corresponding Agent information to the `AgentStatuses` table.
 
-Depending on the event, this can include:
-
-* Event time
-* Event ID
-* Agent ID
-* Hostname
-* Username
-* IP Address
-* Category
-* Source
-* Severity
-* Message
-* Ingest time
-* Other event information
-
-The processed logs are then written to SQL Server in bulk.
-
-### 20. Bulk SQL Insert
-
-Logs are not inserted into SQL Server one by one.
-
-Instead, they are processed and written in batches.
-
-This helps:
-
-* Reduce database round trips
-* Reduce SQL Server overhead
-* Improve throughput under high log volume
-
-The general flow is:
-```text
-Queue
- ↓
-Batch
- ↓
-Processing
- ↓
-Enrichment
- ↓
-Bulk Insert
- ↓
-SQL Server
-```
-### 21. Rule Loading
-
-The Ingestor periodically checks SQL Server for updated rules.
-
-New or modified rules are loaded into KuralHafizasi.
-
-This allows rule changes to affect log processing without requiring the Ingestor to be restarted.
-
-The general flow is:
-```text
-SQL Server Rules
-       ↓
-Load Rules
-       ↓
-Rule Memory
-       ↓
-Incoming Logs
-       ↓
-Severity / Category
-```
-### 22. Agent Status / GetOrFetchAgentInfoAsync
-
-Agent information is stored in the AgentStatuses table in SQL Server.
-
-GetOrFetchAgentInfoAsync retrieves the required Agent information from SQL Server or uses the information already available in memory.
-
-Tracked information can include:
-
-* Agent ID
-* Hostname
-* Username
-* IP Address
-* Heartbeat information
-* Last known Agent status
-
-This information is used both for Agent monitoring and log enrichment.
-
-### 23. Heartbeat Worker
-
-The HeartbeatWorker processes heartbeat data received over UDP.
-
-Heartbeat information is written to:
-
-AgentStatuses
-
-in SQL Server.
-
-The flow is:
 ```text
 Agent
  ↓
@@ -616,71 +470,199 @@ HeartbeatWorker
  ↓
 AgentStatuses
 ```
-If an error occurs during processing, the error is printed to the console.
 
-### 24. Agent Status Updates
+## Log Doctor
 
-Heartbeat information allows the current Agent information to be maintained in SQL Server.
+`LogDoctor` periodically checks the health of the log processing pipeline.
 
-For example:
+It can monitor:
+
+* Incoming log count
+* Dropped log count
+* Invalid JSON count
+* Total traffic
+* Lost/dropped data
+* Loss rate
+
+The results are recorded and also printed to the console.
+
+---
+
+# Log Processing & Enrichment
+
+Before logs are written to SQL Server, they go through several processing stages.
+
+## Default Values
+
+Incoming logs initially receive:
+
 ```text
-Agent
- ├── AgentId
- ├── Hostname
- ├── Username
- ├── IP Address
- └── Last Heartbeat
+Severity = 1
 ```
-This information also provides the foundation for Agent monitoring in the Web application.
 
-### 25. InsertStat / System Statistics
+If no category is available:
+
+```text
+Category = Unknown
+```
+
+Hostname information is preserved when available.
+
+## Rule-Based Processing
+
+The event's `event_id` is checked against the rule memory.
+
+If a matching rule is found:
+
+```text
+Event ID
+   ↓
+Rule Match
+   ├── Severity
+   └── Category
+```
+
+The corresponding values are applied to the log.
+
+## Agent Enrichment
+
+Agent information can also be added to the log before it is stored.
+
+```text
+Hostname
+    ↓
+GetOrFetchAgentInfoAsync()
+    ↓
+Agent Information
+    ├── Agent ID
+    ├── Username
+    └── IP Address
+```
+
+This allows logs to contain additional context that may not have been present in the original event.
+
+---
+
+# SQL Database Processing
+
+After processing and enrichment, the log record contains information such as:
+
+* Event Time
+* Event ID
+* Agent ID
+* Hostname
+* Username
+* IP Address
+* Category
+* Source
+* Severity
+* Message
+* Ingest Time
+
+Logs are processed in batches and written to SQL Server in bulk.
+
+This helps reduce database round trips and SQL Server overhead while improving throughput under higher log volumes.
+
+```text
+Queue
+ ↓
+Batch
+ ↓
+Processing
+ ↓
+Rule Processing
+ ↓
+Enrichment
+ ↓
+Bulk Insert
+ ↓
+SQL Server
+```
+
+---
+
+# Dynamic Rule Loading
+
+The Ingestor periodically checks SQL Server for updated rules.
+
+New or modified rules are loaded into `KuralHafizasi`.
+
+This allows rule changes to affect incoming log processing without restarting the Ingestor.
+
+```text
+SQL Server Rules
+       ↓
+Load Rules
+       ↓
+Rule Memory
+       ↓
+Incoming Logs
+       ↓
+Severity / Category
+```
+```text
+string sql =
+    "SELECT EventId, Severity, Category " +
+    "FROM Rules WHERE IsEnabled = 1";
+
+using SqlCommand cmd = new SqlCommand(sql, conn);
+using SqlDataReader reader = cmd.ExecuteReader();
+
+while (reader.Read())
+{
+    int id = reader.GetInt32(0);
+    byte sev = reader.GetByte(1);
+    string cat = reader.GetString(2);
+
+    yeniHafiza[id] = new KuralBilgisi
+    {
+        Severity = sev,
+        Category = cat
+    };
+}
+
+KuralHafizasi = yeniHafiza;
+```
+---
+
+# Agent Status
+
+Agent information is stored in the `AgentStatuses` table.
+
+Tracked information can include:
+
+* Agent ID
+* Hostname
+* Username
+* IP Address
+* Heartbeat information
+* Last known Agent status
+
+This information is used for both Agent monitoring and log enrichment.
+
+---
+
+# System Statistics
 
 The Ingestor records system-level statistics in SQL Server.
 
-Tracked statistics can include:
+These can include:
 
 * Incoming log count
 * Dropped log count
 * Invalid JSON count
 * Traffic information
-* System processing statistics
+* Processing statistics
 
-These statistics can later be used for monitoring and analysis.
+These statistics provide visibility into the health and performance of the ingestion pipeline.
 
-### 26. LogDoctor
+---
 
-LogDoctor is responsible for monitoring the health of the log processing pipeline.
+# Error Handling
 
-It periodically checks the current state of the system.
+GreenFlag uses fault isolation throughout the Agent and Ingestor pipeline.
 
-It can monitor:
-
-* Logs dropped from the queue
-* Logs lost because of invalid JSON
-* Total incoming logs
-* Total traffic
-* Dropped/lost data
-* Loss rate
-
-The loss rate is calculated based on the total incoming traffic and recorded accordingly.
-
-The results are also printed to the console.
-
-For example:
-
-* Incoming Logs
-* Dropped Logs
-* Invalid JSON
-* Total Traffic
-* Loss Rate
-
-can be monitored.
-
-### 27. Error Handling
-
-GreenFlag uses basic fault isolation throughout the Agent and Ingestor pipeline.
-
-The goal is to prevent a single:
+The system is designed so that a single:
 
 * Malformed JSON packet
 * Invalid UDP packet
@@ -689,28 +671,31 @@ The goal is to prevent a single:
 * Parser error
 * Unexpected event
 
-from terminating the entire system.
+does not unnecessarily terminate the entire pipeline.
 
-Errors are handled by the relevant component, logged to the console, and processing continues whenever possible.
+Errors are handled by the relevant component and printed to the console, while processing continues whenever possible.
 
-In particular, JSON deserialization errors are counted separately so that packet loss can be monitored.
+JSON deserialization errors and dropped logs are also counted separately, allowing the system to track potential data loss.
 
-## 28. GreenFlag Web
+---
+
+# GreenFlag Web
 
 The Web application is the visual and management layer of GreenFlag.
 
-An important architectural detail is:
+The Web application does **not** communicate directly with the Ingestor.
 
-The Web application does not communicate directly with the Ingestor.
+Instead, it connects directly to SQL Server:
 
-The Web application connects directly to SQL Server:
 ```text
 GreenFlag Web
       │
       ▼
 SQL Server
 ```
+
 The Ingestor follows a separate pipeline:
+
 ```text
 Agent
   ↓
@@ -720,9 +705,10 @@ Ingestor
   ↓
 SQL Server
 ```
-### 29. Web Features
 
-The Web application uses the data stored in SQL Server to provide:
+## Web Features
+
+The Web application currently provides:
 
 * Log viewing
 * Log filtering
@@ -730,16 +716,40 @@ The Web application uses the data stored in SQL Server to provide:
 * Rule management
 * User management
 * Agent information
+* Monitoring
 * Reporting
 * Statistics
-* Monitoring functionality
 
-## 30. Complete Data Flow
+---
 
-The complete GreenFlag architecture can be summarized as:
+# Reporting
+
+### Detailed Excel Analytics
+
+|                   Security Events Data                   |                       Report Statistics                      |
+| :------------------------------------------------------: | :----------------------------------------------------------: |
+| ![Security Events](Assets/GreenFlag-Security-Events.png) | ![Report Statistics](Assets/GreenFlag-Report-Statistics.png) |
+
+GreenFlag includes an integrated Excel reporting system.
+
+Reports can contain:
+
+* Executive Summary
+* Security Events
+* Severity statistics
+* Top Hostnames
+* Top IP Addresses
+* Top Event Categories
+
+The reporting system uses the same filtered event data available through the Web interface.
+
+---
+
+# Complete Data Flow
+
 ```text
 ┌──────────────────────────┐
-│ Windows Event Manager    │
+│ Windows Event Log        │
 │ Security / Application / │
 │ System                   │
 └────────────┬─────────────┘
@@ -770,9 +780,9 @@ The complete GreenFlag architecture can be summarized as:
 │ Heartbeat Queue          │
 │                          │
 │ ┌──────────────────────┐ │
-│ │ SQLWorker            │ │
-│ │ HeartbeatWorker      │ │
-│ │ LogDoctor            │ │
+│ │ SQL Worker           │ │
+│ │ Heartbeat Worker     │ │
+│ │ Log Doctor           │ │
 │ └──────────────────────┘ │
 └────────────┬─────────────┘
              │
@@ -800,15 +810,18 @@ The complete GreenFlag architecture can be summarized as:
 │ Statistics               │
 └──────────────────────────┘
 ```
-## 31. Current Technical Capabilities
 
-Based on the current architecture, GreenFlag can currently perform:
+---
 
-* Windows Event Manager event collection
-* Event tracking using EventRecordId
-* Security, Application, and System log collection
+# Current Technical Capabilities
+
+The current implementation provides:
+
+* Windows Event Log collection
+* Event tracking using `EventRecordId`
+* Security, Application, and System log channels
 * Parser-based event processing
-* Parser selection through ParserFactory
+* Parser selection through `ParserFactory`
 * UDP-based log transmission
 * JSON-based packet serialization
 * Batched log transmission
@@ -816,7 +829,7 @@ Based on the current architecture, GreenFlag can currently perform:
 * Agent information tracking
 * Centralized UDP-based log ingestion
 * JSON error detection and counting
-* A 100,000-log queue capacity
+* 100,000-log queue capacity
 * Load protection through selective low-priority log dropping
 * Protection of higher-priority logs under queue pressure
 * Rule memory
@@ -837,27 +850,27 @@ Based on the current architecture, GreenFlag can currently perform:
 * Excel reporting
 * Basic event statistics and analysis
 
-## 32. Future Development Direction
+---
 
-The current GreenFlag architecture is more than a simple:
+# Vision & Roadmap
 
-Event Log → Database
+GreenFlag is currently under active development.
 
-application.
+The long-term goal is to evolve the project into a more complete and extensible SIEM platform while preserving its modular architecture.
 
-The Agent provides event collection and parsing, while the Ingestor provides UDP ingestion, queue management, rule processing, enrichment, worker-based processing, load protection, and pipeline monitoring.
-
-Future development can build additional SIEM capabilities on top of this architecture, including:
+Planned improvements include:
 
 * Event correlation engine
 * More advanced detection capabilities
-* Alert management
-* Incident management
-* Advanced endpoint telemetry
-* Further development of the Agent for more flexible endpoint data collection
+* Expanded alerting capabilities
+* Improved incident investigation and management
+* More advanced endpoint telemetry
+* Further development of the existing Agent for more flexible endpoint data collection
 * Linux Agent
 * Multi-platform endpoint support
 * Advanced analytics
 * More advanced reporting
 
-The project is designed around a modular architecture so these capabilities can be introduced progressively without requiring a complete redesign of the existing system.
+The current Agent already provides Windows event collection. Future development will focus on expanding its capabilities and making endpoint data collection more flexible and platform-independent.
+
+The modular architecture is intended to allow these capabilities to be introduced progressively without requiring a complete redesign of the existing system.

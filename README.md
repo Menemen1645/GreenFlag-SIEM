@@ -23,9 +23,9 @@ GreenFlag is a lightweight SIEM solution developed with C#. It is designed aroun
 
 ### Rules & Executive Reporting
 
-|            Rule Management & Alerts            |                   Executive Summary — Excel                  |
-| :--------------------------------------------: | :----------------------------------------------------------: |
-| ![Rule Management](Assets/GreenFlag-Rules.png) | ![Executive Summary](Assets/GreenFlag-Executive-Summary.png) |
+|            Rule Management & Alerts            |
+| :--------------------------------------------: | 
+| ![Rule Management](Assets/GreenFlag-Rules.png) | 
 
 ---
 
@@ -300,7 +300,7 @@ The current queue limit is:
 100,000 logs
 ```
 
-This prevents unlimited memory growth under heavy load.
+This prevents the log queue from growing indefinitely under heavy load.
 
 When the queue reaches its limit, the Ingestor checks the event's configured rule and severity.
 
@@ -396,6 +396,7 @@ When an incoming event is processed, its `event_id` is compared against the rule
 
 If a matching rule exists, the event's severity and category are updated accordingly.
 
+The rules are periodically refreshed from SQL Server without requiring an Ingestor restart
 ---
 
 # Asynchronous Workers
@@ -726,9 +727,9 @@ The Web application currently provides:
 
 ### Detailed Excel Analytics
 
-|                   Security Events Data                   |                       Report Statistics                      |
-| :------------------------------------------------------: | :----------------------------------------------------------: |
-| ![Security Events](Assets/GreenFlag-Security-Events.png) | ![Report Statistics](Assets/GreenFlag-Report-Statistics.png) |
+![Security Events](Assets/GreenFlag-Executive-Summary.png) 
+![Security Events](Assets/GreenFlag-Security-Events.png) 
+![Report Statistics](Assets/GreenFlag-Report-Statistics.png) 
 
 GreenFlag includes an integrated Excel reporting system.
 
